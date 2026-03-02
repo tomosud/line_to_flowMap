@@ -2,6 +2,36 @@
 
 線画画像からフローマップ（16bit RGB PNG）を生成するツール。
 
+---
+
+## Web 版（ブラウザで動作・インストール不要）
+
+### GitHub Pages で使う
+
+リポジトリを GitHub に push し、Settings → Pages → `/docs` フォルダを公開するだけで使える。
+
+### ローカルで使う
+
+```
+local_server.bat
+```
+
+ダブルクリックで `http://localhost:8099` が開く（Python が必要）。
+
+### 再ビルド
+
+ソース (`webapp/`) を変更した場合:
+
+```
+cd webapp
+npm install
+npm run build
+```
+
+`docs/` フォルダが更新される。
+
+---
+
 ## 概要
 
 白背景に黒線の線画を入力として、線の方向に沿ったフローマップを出力する。
