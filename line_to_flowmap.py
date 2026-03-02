@@ -15,7 +15,7 @@ import os
 import numpy as np
 import cv2
 from skimage.morphology import skeletonize
-from scipy.ndimage import distance_transform_edt, gaussian_filter
+from scipy.ndimage import gaussian_filter
 
 # ── チューニング定数 ───────────────────────────────────────────────────────
 MORPH_CLOSE_KERNEL_SIZE = 3   # 線途切れ補修カーネルサイズ（px）
@@ -149,15 +149,28 @@ def trace_all_polylines(adjacency, endpoints, junctions, shape):
     """
     全ポリラインをトレースする。
     開いた線分は端点(score=y*W+x 最小)から開始し、左上優先で方向を統一する。
+    各ポリラインはV0方向に合わせて必要なら反転する（ポリライン単位の方向一貫性）。
     閉曲線は未訪問の任意点から開始する。
 
     Returns:
         polylines (list of list): [(y,x), ...] のリスト
     """
+    v0x, v0y = _normalize_vec(BASE_VECTOR_X, BASE_VECTOR_Y)
     width = shape[1]
     visited_edges = set()
     visited_pixels = set()
     polylines = []
+
+    def align_polyline(pl):
+        """ポリラインの最初のステップ方向がV0に対して逆なら反転する。
+        ポリライン全体を反転することで内部タンジェントの一貫性を保つ。"""
+        if len(pl) < 2:
+            return pl
+        dy = pl[1][0] - pl[0][0]
+        dx = pl[1][1] - pl[0][1]
+        if v0x * dx + v0y * dy < 0:
+            return list(reversed(pl))
+        return pl
 
     # 開いた線分：端点からスコア順で開始（左上ほどスコアが小さい）
     sorted_endpoints = sorted(endpoints, key=lambda p: p[0] * width + p[1])
@@ -172,6 +185,7 @@ def trace_all_polylines(adjacency, endpoints, junctions, shape):
                 continue
         pl = _trace_path(start, adjacency, visited_edges, visited_pixels, junctions)
         if len(pl) >= 2:
+            pl = align_polyline(pl)
             polylines.append(pl)
 
     # 閉曲線・未到達成分：残った未訪問エッジから開始
@@ -187,6 +201,7 @@ def trace_all_polylines(adjacency, endpoints, junctions, shape):
         start = unvisited_edge_pixels[0]
         pl = _trace_path(start, adjacency, visited_edges, visited_pixels, junctions)
         if len(pl) >= 2:
+            pl = align_polyline(pl)
             polylines.append(pl)
 
     return polylines
@@ -234,64 +249,59 @@ def build_vector_field(tangent_map, mask, shape):
     ベースベクトル場とスケルトン方向をブレンドしてフローベクトル場を構築する。
 
     処理:
-    1. 全画素に V0 = normalize(BASE_VECTOR_X, BASE_VECTOR_Y) を設定
-    2. スケルトン点のタンジェントを V0 と dot 積で符号統一
-    3. 距離変換で最近傍スケルトン点を取得
-    4. ガウス重みでブレンドし正規化
-    5. 軽いスムージング後に再正規化
+    1. ガウス拡散でスケルトンタンジェントを全画素に広げる
+       （加重平均: 周囲の全スケルトン点の影響を距離に応じて合成）
+    2. スケルトン密度に応じてV0とブレンド（空白域ほどV0寄り）
+    3. 正規化 → 軽いスムージング → 再正規化
+
+    最近傍1点のVoronoi境界を避けるため、全スケルトン点の
+    ガウス加重平均を使用する。これにより方向場が滑らかになる。
 
     Returns:
         vector_field (np.ndarray float32, H×W×2): 正規化済みベクトル場
     """
     H, W = shape[:2]
-
-    # ベースベクトル（左上起点・右下方向）
+    eps = 1e-8
     v0x, v0y = _normalize_vec(BASE_VECTOR_X, BASE_VECTOR_Y)
 
-    # ---- Step 1: スケルトン点の向きを V0 と統一 ----
-    ys, xs = np.where(mask)
-    if len(ys) > 0:
-        tx = tangent_map[ys, xs, 0]
-        ty = tangent_map[ys, xs, 1]
-        dot = tx * v0x + ty * v0y
-        flip = dot < 0
-        tangent_map[ys[flip], xs[flip], 0] *= -1
-        tangent_map[ys[flip], xs[flip], 1] *= -1
-
-    # ---- Step 2: 距離変換で最近傍スケルトン点を取得 ----
-    # distance_transform_edt: ~mask=True の画素（背景）から最近傍 False 画素（スケルトン）までの距離
     if mask.any():
-        distances, nearest_indices = distance_transform_edt(~mask, return_indices=True)
-        ny = nearest_indices[0]  # (H, W) 最近傍スケルトン点の y 座標
-        nx = nearest_indices[1]  # (H, W) 最近傍スケルトン点の x 座標
+        # ---- ガウス拡散: 全スケルトン点のタンジェントをGaussianで広げて合成 ----
+        # tx_spread[y,x] = Σ_{s∈skeleton} G_σ(|(y,x)-(sy,sx)|) * tx[sy,sx]
+        # w_spread[y,x]  = Σ_{s∈skeleton} G_σ(|(y,x)-(sy,sx)|)
+        # → 加重平均タンジェント = tx_spread / w_spread
+        mask_f = mask.astype(np.float32)
+        tx_spread = gaussian_filter(tangent_map[:, :, 0] * mask_f, sigma=SIGMA)
+        ty_spread = gaussian_filter(tangent_map[:, :, 1] * mask_f, sigma=SIGMA)
+        w_spread  = gaussian_filter(mask_f, sigma=SIGMA)
 
-        # ---- Step 3: ガウス重みでブレンド ----
-        weights = np.exp(-(distances ** 2) / (2.0 * SIGMA ** 2))  # (H, W)
+        # 加重平均タンジェント（スケルトンが遠い画素では小さな値になる）
+        vs_x = tx_spread / (w_spread + eps)
+        vs_y = ty_spread / (w_spread + eps)
 
-        vs_x = tangent_map[ny, nx, 0]  # (H, W)
-        vs_y = tangent_map[ny, nx, 1]  # (H, W)
+        # ブレンド重み: スケルトン画素でw≈1、空白域でw≈0
+        # 孤立スケルトン1画素のw_spreadピーク値 ≈ 1/(2π σ²) で正規化
+        peak = 1.0 / (2.0 * np.pi * SIGMA ** 2)
+        w_blend = np.clip(w_spread / (peak + eps), 0.0, 1.0)
 
-        w = weights[:, :, np.newaxis]                     # (H, W, 1) broadcast 用
-        vs = np.stack([vs_x, vs_y], axis=-1)              # (H, W, 2)
-        v0_arr = np.array([v0x, v0y], dtype=np.float32)   # (2,)
-
-        blended = (1.0 - w) * v0_arr + w * vs            # (H, W, 2)
+        # V0とスケルトンタンジェントをブレンド
+        blend_x = (1.0 - w_blend) * v0x + w_blend * vs_x
+        blend_y = (1.0 - w_blend) * v0y + w_blend * vs_y
     else:
-        # スケルトンなし: 全画素にベースベクトルのみ
-        blended = np.full((H, W, 2), [v0x, v0y], dtype=np.float32)
+        blend_x = np.full((H, W), v0x, dtype=np.float32)
+        blend_y = np.full((H, W), v0y, dtype=np.float32)
 
-    # ---- Step 4: 正規化 ----
-    norms = np.linalg.norm(blended, axis=-1, keepdims=True)
-    norms = np.where(norms < 1e-8, 1.0, norms)
-    vector_field = blended / norms
+    # ---- 正規化 ----
+    norm = np.sqrt(blend_x ** 2 + blend_y ** 2)
+    norm = np.where(norm < eps, 1.0, norm)
+    vector_field = np.stack([blend_x / norm, blend_y / norm], axis=-1)
 
-    # ---- Step 5: 軽いスムージング（方向の急変を緩和）----
+    # ---- 軽いスムージング（方向の急変を緩和）----
     if SMOOTH_SIGMA > 0:
         vector_field[:, :, 0] = gaussian_filter(vector_field[:, :, 0], sigma=SMOOTH_SIGMA)
         vector_field[:, :, 1] = gaussian_filter(vector_field[:, :, 1], sigma=SMOOTH_SIGMA)
-        norms = np.linalg.norm(vector_field, axis=-1, keepdims=True)
-        norms = np.where(norms < 1e-8, 1.0, norms)
-        vector_field /= norms
+        norm = np.linalg.norm(vector_field, axis=-1, keepdims=True)
+        norm = np.where(norm < eps, 1.0, norm)
+        vector_field /= norm
 
     return vector_field
 
@@ -321,6 +331,57 @@ def encode_flowmap(vector_field):
     # cv2 は BGR 順で保存するので、ファイル上の R/G/B が正しくなるよう逆順に積む
     bgr_16 = np.stack([B_16, G_16, R_16], axis=-1)
     return bgr_16
+
+
+def save_debug_polylines(polylines, skeleton, input_path):
+    """
+    ポリラインごとにランダムな色を付けたデバッグ画像を保存する。
+    - 背景: 白
+    - 各ポリライン: ランダム色の太さ1pxライン
+    - 端点: 小さな円でマーク
+    - 孤立点（長さ1）: 黒点
+
+    Output: {stem}_debug_polylines.png (8bit RGB PNG)
+    """
+    H, W = skeleton.shape
+    # 白背景
+    canvas = np.full((H, W, 3), 255, dtype=np.uint8)
+
+    rng = np.random.default_rng(42)  # 再現性のある乱数
+    total_pixels = 0
+
+    for pl in polylines:
+        # ランダム色（明るすぎ・暗すぎを避ける）
+        color = tuple(int(c) for c in rng.integers(40, 220, size=3).tolist())
+
+        if len(pl) == 1:
+            y, x = pl[0]
+            cv2.circle(canvas, (x, y), 2, (0, 0, 0), -1)
+            total_pixels += 1
+            continue
+
+        # ポリラインを線で描画
+        pts = np.array([[x, y] for y, x in pl], dtype=np.int32)
+        cv2.polylines(canvas, [pts], isClosed=False, color=color, thickness=1)
+
+        # 端点に小さな円
+        sy, sx = pl[0]
+        ey, ex = pl[-1]
+        cv2.circle(canvas, (sx, sy), 3, color, -1)
+        cv2.circle(canvas, (ex, ey), 3, color, -1)
+        total_pixels += len(pl)
+
+    input_dir = os.path.dirname(os.path.abspath(input_path))
+    stem = os.path.splitext(os.path.basename(input_path))[0]
+    out_path = os.path.join(input_dir, stem + "_debug_polylines.png")
+
+    success, buf = cv2.imencode(".png", canvas)
+    if success:
+        with open(out_path, 'wb') as f:
+            f.write(buf.tobytes())
+        print(f"[DEBUG] ポリライン可視化: {out_path}  ({len(polylines)} 本, {total_pixels} px)")
+    else:
+        print("[WARN] デバッグ画像の保存に失敗しました")
 
 
 def save_output(bgr_16bit, input_path):
@@ -369,6 +430,8 @@ def main(input_path):
 
     polylines = trace_all_polylines(adjacency, endpoints, junctions, binary.shape)
     print(f"[INFO] ポリライン数: {len(polylines)}")
+
+    save_debug_polylines(polylines, skeleton, input_path)
 
     tangent_map, mask = compute_tangents(polylines, binary.shape)
 
