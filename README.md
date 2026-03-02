@@ -8,7 +8,7 @@
 
 ### GitHub Pages で使う
 
-リポジトリを GitHub に push し、Settings → Pages → `/docs` フォルダを公開するだけで使える。
+https://tomosud.github.io/line_to_flowMap/docs/index.html
 
 ### ローカルで使う
 
