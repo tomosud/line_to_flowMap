@@ -288,61 +288,62 @@ function computeTangents(polylines, width, height) {
   return { tX, tY, mask }
 }
 
-// ─── Gaussian filter (3-pass box blur approximation) ─────────────────────────
+// ─── Gaussian filter (true separable, matches scipy.ndimage.gaussian_filter) ──
+// mode='reflect' (half-sample symmetric: ... c b | a b c d | c b a ...)
+// truncate=4.0  (kernel radius = ceil(4 * sigma))
 
-function gaussianBoxWidths(sigma, n) {
-  const idealW = Math.sqrt(12 * sigma * sigma / n + 1)
-  let wl = Math.floor(idealW)
-  if (wl % 2 === 0) wl--
-  const wu = wl + 2
-  const m = Math.round((12 * sigma * sigma - n * wl * wl - 4 * n * wl - 3 * n) / (-4 * wl - 4))
-  return Array.from({ length: n }, (_, i) => i < m ? wl : wu)
-}
-
-function boxBlur1D(src, width, height, radius, horiz) {
-  const dst = new Float32Array(src.length)
-  const w = 2 * radius + 1
-  if (horiz) {
-    for (let y = 0; y < height; y++) {
-      const row = y * width
-      let sum = 0
-      for (let k = -radius; k <= radius; k++) {
-        sum += src[row + Math.max(0, Math.min(width - 1, k))]
-      }
-      dst[row] = sum / w
-      for (let x = 1; x < width; x++) {
-        sum -= src[row + Math.max(0, x - radius - 1)]
-        sum += src[row + Math.min(width - 1, x + radius)]
-        dst[row + x] = sum / w
-      }
-    }
-  } else {
-    for (let x = 0; x < width; x++) {
-      let sum = 0
-      for (let k = -radius; k <= radius; k++) {
-        sum += src[Math.max(0, Math.min(height - 1, k)) * width + x]
-      }
-      dst[x] = sum / w
-      for (let y = 1; y < height; y++) {
-        sum -= src[Math.max(0, y - radius - 1) * width + x]
-        sum += src[Math.min(height - 1, y + radius) * width + x]
-        dst[y * width + x] = sum / w
-      }
-    }
-  }
-  return dst
+function _reflectIdx(i, n) {
+  // Map index i into [0, n-1] using reflect (half-sample symmetric) boundary.
+  // Equivalent to scipy mode='reflect': index -1 → 1, index n → n-2
+  if (i < 0)   i = -i
+  if (i >= n)   i = 2 * n - 2 - i
+  // Safety clamp for very small images or extreme sigma
+  if (i < 0)   i = 0
+  if (i >= n)  i = n - 1
+  return i
 }
 
 function gaussianFilter(data, width, height, sigma) {
   if (sigma <= 0) return new Float32Array(data)
-  const widths = gaussianBoxWidths(sigma, 3)
-  let result = new Float32Array(data)
-  for (const bw of widths) {
-    const r = (bw - 1) / 2
-    result = boxBlur1D(result, width, height, r, true)
-    result = boxBlur1D(result, width, height, r, false)
+
+  // Build 1D Gaussian kernel (truncate=4.0, normalized)
+  const radius = Math.ceil(4.0 * sigma)
+  const kLen   = 2 * radius + 1
+  const kernel = new Float32Array(kLen)
+  const s2inv  = 1.0 / (2.0 * sigma * sigma)
+  let ksum = 0
+  for (let i = 0; i < kLen; i++) {
+    const d = i - radius
+    kernel[i] = Math.exp(-d * d * s2inv)
+    ksum += kernel[i]
   }
-  return result
+  for (let i = 0; i < kLen; i++) kernel[i] /= ksum
+
+  // Horizontal pass: src → tmp
+  const tmp = new Float32Array(width * height)
+  for (let y = 0; y < height; y++) {
+    const row = y * width
+    for (let x = 0; x < width; x++) {
+      let v = 0
+      for (let k = 0; k < kLen; k++) {
+        v += data[row + _reflectIdx(x + k - radius, width)] * kernel[k]
+      }
+      tmp[row + x] = v
+    }
+  }
+
+  // Vertical pass: tmp → out
+  const out = new Float32Array(width * height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let v = 0
+      for (let k = 0; k < kLen; k++) {
+        v += tmp[_reflectIdx(y + k - radius, height) * width + x] * kernel[k]
+      }
+      out[y * width + x] = v
+    }
+  }
+  return out
 }
 
 // ─── Vector field ─────────────────────────────────────────────────────────────
