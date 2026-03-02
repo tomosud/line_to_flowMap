@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Line to Flow Map</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #111318;
+      --surface:  #1c1f27;
+      --surface2: #23272f;
+      --border:   #2e3340;
+      --accent:   #4f8ef7;
+      --accent2:  #3a6dd4;
+      --text:     #d8dce8;
+      --muted:    #6b7280;
+      --danger:   #e05252;
+      --success:  #52c46e;
+      --radius:   10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 20px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: .85rem;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      gap: 20px;
+      max-width: 1280px;
+      margin: 0 auto;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    /* ── Settings panel ── */
+    .settings {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      width: 240px;
+      min-width: 220px;
+      flex-shrink: 0;
+    }
+    .settings h2 {
+      font-size: .9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .param-row {
+      margin-bottom: 14px;
+    }
+    .param-row label {
+      display: block;
+      font-size: .82rem;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .param-row .row-inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    input[type=range] {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .val-badge {
+      font-size: .82rem;
+      font-family: monospace;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      min-width: 44px;
+      text-align: center;
+    }
+    select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 5px 8px;
+      font-size: .85rem;
+      cursor: pointer;
+      outline: none;
+    }
+    select:focus { border-color: var(--accent); }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0;
+    }
+
+    .tip {
+      font-size: .76rem;
+      color: var(--muted);
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 8px 10px;
+      border-left: 3px solid var(--accent);
+    }
+
+    /* ── Main area ── */
+    .main-area {
+      flex: 1;
+      min-width: 300px;
+    }
+
+    /* ── Drop zone ── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      background: var(--surface);
+      margin-bottom: 16px;
+      user-select: none;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: #1e2330;
+    }
+    .drop-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+    .drop-zone p { font-size: .88rem; color: var(--muted); }
+    .drop-zone input[type=file] { display: none; }
+
+    /* ── Buttons ── */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+    button {
+      border: none;
+      border-radius: 7px;
+      padding: 8px 18px;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:not(:disabled):hover { background: var(--accent2); }
+    .btn-cancel  { background: var(--surface2); color: var(--danger); border: 1px solid var(--border); }
+    .btn-cancel:hover { background: #2a2030; }
+    .btn-download { background: var(--success); color: #111; }
+    .btn-download:not(:disabled):hover { background: #3aaa5a; }
+
+    #info-text { font-size: .78rem; color: var(--muted); align-self: center; }
+
+    /* ── Progress ── */
+    .progress-area {
+      margin-bottom: 16px;
+    }
+    .progress-track {
+      background: var(--surface2);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: width .3s ease;
+    }
+    #progress-log {
+      font-size: .78rem;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+
+    /* ── Preview canvases ── */
+    .preview-area {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .canvas-card {
+      flex: 1;
+      min-width: 200px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .canvas-card h3 {
+      font-size: .8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .canvas-card canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 5px;
+      background: #0a0a0a;
+      image-rendering: pixelated;
+    }
+
+    /* ── Skeleton toggle ── */
+    #skel-row {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    #skel-row label { font-size: .8rem; color: var(--muted); cursor: pointer; }
+    input[type=checkbox] { accent-color: var(--danger); cursor: pointer; }
+  </style>
+  <script type="module" crossorigin src="./assets/index-DYAuSOgR.js"></script>
+</head>
+<body>
+
+<h1>Line to Flow Map</h1>
+<p class="subtitle">線画からフローマップ（16bit RGB PNG）を生成します</p>
+
+<div class="layout">
+
+  <!-- ── Settings ── -->
+  <aside class="settings">
+    <h2>パラメータ</h2>
+
+    <div class="param-row">
+      <label>影響半径 σ (Sigma)</label>
+      <div class="row-inline">
+        <input type="range" id="sigma" min="1" max="100" value="20" step="1" />
+        <span class="val-badge" id="sigma-val">20</span>
+      </div>
+    </div>
+
+    <div class="param-row">
+      <label>平滑化 σ (Smooth)</label>
+      <div class="row-inline">
+        <input type="range" id="smooth" min="0" max="5" value="1.0" step="0.1" />
+        <span class="val-badge" id="smooth-val">1.0</span>
+      </div>
+    </div>
+
+    <div class="param-row">
+      <label>Bチャンネル値</label>
+      <div class="row-inline">
+        <input type="range" id="blue" min="0" max="1" value="0.5" step="0.01" />
+        <span class="val-badge" id="blue-val">0.50</span>
+      </div>
+    </div>
+
+    <div class="param-row">
+      <label>ベース方向</label>
+      <select id="base-dir">
+        <option value="1,0">→ 右</option>
+        <option value="1,1" selected>↘ 右下（デフォルト）</option>
+        <option value="0,1">↓ 下</option>
+        <option value="-1,1">↙ 左下</option>
+        <option value="-1,0">← 左</option>
+        <option value="0,-1">↑ 上</option>
+      </select>
+    </div>
+
+    <div class="param-row">
+      <label>モルフォロジー Close</label>
+      <select id="morph">
+        <option value="1">なし</option>
+        <option value="3" selected>3×3（デフォルト）</option>
+        <option value="5">5×5</option>
+        <option value="7">7×7</option>
+      </select>
+    </div>
+
+    <hr class="divider" />
+
+    <p class="tip">白背景に黒線の画像を使用してください。PNG / JPG 対応。</p>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main-area">
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="drop-zone">
+      <div class="icon">🖼</div>
+      <p>画像をドラッグ＆ドロップ<br>またはクリックして選択</p>
+      <input type="file" id="file-input" accept="image/*" />
+    </div>
+
+    <!-- Buttons -->
+    <div class="btn-row">
+      <button class="btn-primary" id="generate-btn" disabled>フローマップを生成</button>
+      <button class="btn-cancel"  id="cancel-btn"   style="display:none">キャンセル</button>
+      <button class="btn-download" id="download-btn" style="display:none">ダウンロード 16-bit PNG</button>
+      <span id="info-text"></span>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-area" id="progress-area" style="display:none">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div id="progress-log"></div>
+    </div>
+
+    <!-- Preview -->
+    <div class="preview-area" id="preview-area" style="display:none">
+      <div class="canvas-card">
+        <h3>入力画像</h3>
+        <canvas id="in-canvas"></canvas>
+      </div>
+      <div class="canvas-card">
+        <h3>フローマップ（8bit プレビュー）</h3>
+        <canvas id="out-canvas"></canvas>
+        <div id="skel-row">
+          <input type="checkbox" id="skel-toggle" />
+          <label for="skel-toggle">スケルトンをオーバーレイ</label>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
