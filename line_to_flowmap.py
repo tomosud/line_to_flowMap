@@ -431,8 +431,6 @@ def main(input_path):
     polylines = trace_all_polylines(adjacency, endpoints, junctions, binary.shape)
     print(f"[INFO] ポリライン数: {len(polylines)}")
 
-    save_debug_polylines(polylines, skeleton, input_path)
-
     tangent_map, mask = compute_tangents(polylines, binary.shape)
 
     vector_field = build_vector_field(tangent_map, mask, binary.shape)
