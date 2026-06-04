@@ -42,6 +42,16 @@
       color: var(--muted);
       margin-bottom: 24px;
     }
+    .published-link {
+      display: inline-block;
+      margin-left: 10px;
+      color: var(--accent);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .published-link:hover {
+      text-decoration: underline;
+    }
 
     /* ── Layout ── */
     .layout {
@@ -250,7 +260,10 @@
 <body>
 
 <h1>Line to Flow Map</h1>
-<p class="subtitle">線画からフローマップ（16bit RGB PNG）を生成します</p>
+<p class="subtitle">
+  線画からフローマップ（16bit RGB PNG）を生成します
+  <a class="published-link" href="https://tomosud.github.io/line_to_flowMap/docs/index.html" target="_blank" rel="noopener">公開版を開く</a>
+</p>
 
 <div class="layout">
 
