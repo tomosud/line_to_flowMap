@@ -1,6 +1,6 @@
 /**
  * flowmap.js
- * JavaScript port of line_to_flowmap.py
+ * Flow map generation core.
  *
  * Generates a flow map (16-bit RGB) from a line-art image.
  * Assumes white background with dark lines.

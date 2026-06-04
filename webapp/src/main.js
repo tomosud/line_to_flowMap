@@ -34,9 +34,63 @@ const morphSel        = document.getElementById('morph')
 const blueInput       = document.getElementById('blue')
 const blueVal         = document.getElementById('blue-val')
 
-sigmaInput.addEventListener('input',  () => { sigmaVal.textContent  = sigmaInput.value })
-smoothInput.addEventListener('input', () => { smoothVal.textContent = (+smoothInput.value).toFixed(1) })
-blueInput.addEventListener('input',   () => { blueVal.textContent   = (+blueInput.value).toFixed(2) })
+function setRangeValue(input, value) {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue)) return
+
+  const min = Number(input.min)
+  const max = Number(input.max)
+  input.value = String(Math.min(max, Math.max(min, numberValue)))
+}
+
+function setSelectValue(select, value) {
+  if ([...select.options].some(option => option.value === value)) {
+    select.value = value
+  }
+}
+
+function updateParamLabels() {
+  sigmaVal.textContent  = sigmaInput.value
+  smoothVal.textContent = (+smoothInput.value).toFixed(1)
+  blueVal.textContent   = (+blueInput.value).toFixed(2)
+}
+
+function loadParamsFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+
+  if (params.has('sigma')) setRangeValue(sigmaInput, params.get('sigma'))
+  if (params.has('smooth')) setRangeValue(smoothInput, params.get('smooth'))
+  if (params.has('blue')) setRangeValue(blueInput, params.get('blue'))
+  if (params.has('baseDir')) setSelectValue(baseDirSel, params.get('baseDir'))
+  if (params.has('morph')) setSelectValue(morphSel, params.get('morph'))
+
+  updateParamLabels()
+}
+
+function syncParamsToUrl() {
+  const params = new URLSearchParams(window.location.search)
+  params.set('sigma', sigmaInput.value)
+  params.set('smooth', smoothInput.value)
+  params.set('blue', blueInput.value)
+  params.set('baseDir', baseDirSel.value)
+  params.set('morph', morphSel.value)
+
+  const nextUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`
+  window.history.replaceState(null, '', nextUrl)
+}
+
+function handleParamChange() {
+  updateParamLabels()
+  syncParamsToUrl()
+}
+
+loadParamsFromUrl()
+
+sigmaInput.addEventListener('input', handleParamChange)
+smoothInput.addEventListener('input', handleParamChange)
+blueInput.addEventListener('input', handleParamChange)
+baseDirSel.addEventListener('change', handleParamChange)
+morphSel.addEventListener('change', handleParamChange)
 
 // ─── File loading ─────────────────────────────────────────────────────────────
 function loadFile(file) {

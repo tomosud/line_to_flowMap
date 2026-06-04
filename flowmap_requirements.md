@@ -141,10 +141,9 @@ if dot(t, V0(s)) \< 0: t = -t
 
 ## 13. 実装推奨環境
 
--   Python
--   OpenCV
--   scikit-image
--   NumPy
+-   JavaScript
+-   Vite
+-   Web Worker
 
 ------------------------------------------------------------------------
 
