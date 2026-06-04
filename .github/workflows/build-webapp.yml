@@ -1,4 +1,4 @@
-name: Build webapp
+name: Build and deploy webapp
 
 on:
   push:
@@ -11,20 +11,28 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
-  group: build-webapp-${{ github.ref }}
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -53,3 +61,17 @@ jobs:
           git add docs
           git commit -m "Build webapp"
           git push
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir pages-root
+          cp -R docs pages-root/docs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages-root
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
