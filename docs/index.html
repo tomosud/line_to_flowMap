@@ -90,6 +90,53 @@
       color: var(--muted);
       margin-bottom: 5px;
     }
+    .param-label {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      width: fit-content;
+    }
+    .help-dot {
+      display: inline-grid;
+      place-items: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: .68rem;
+      line-height: 1;
+    }
+    .param-label::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 8px);
+      z-index: 10;
+      width: min(260px, 78vw);
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #0d1016;
+      color: var(--text);
+      font-size: .74rem;
+      line-height: 1.45;
+      text-transform: none;
+      letter-spacing: 0;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition: opacity .12s, transform .12s;
+    }
+    .param-label:hover::after,
+    .param-label:focus::after,
+    .param-label:focus-visible::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
     .param-row .row-inline {
       display: flex;
       align-items: center;
@@ -188,6 +235,17 @@
     .btn-cancel:hover { background: #2a2030; }
     .btn-download { background: var(--success); color: #111; }
     .btn-download:not(:disabled):hover { background: #3aaa5a; }
+    .btn-reset {
+      width: 100%;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      margin-top: 2px;
+    }
+    .btn-reset:hover {
+      border-color: var(--accent);
+      color: #fff;
+    }
 
     #info-text { font-size: .78rem; color: var(--muted); align-self: center; }
 
@@ -255,7 +313,7 @@
     #skel-row label { font-size: .8rem; color: var(--muted); cursor: pointer; }
     input[type=checkbox] { accent-color: var(--danger); cursor: pointer; }
   </style>
-  <script type="module" crossorigin src="./assets/index-DIeQSZXJ.js"></script>
+  <script type="module" crossorigin src="./assets/index-C8iknycR.js"></script>
 </head>
 <body>
 
@@ -272,7 +330,10 @@
     <h2>パラメータ</h2>
 
     <div class="param-row">
-      <label>影響半径 σ (Sigma)</label>
+      <label class="param-label" for="sigma" tabindex="0" data-tooltip="線の向きが周囲へ影響する距離です。大きいほど線から離れた場所まで方向が広く伝わります。">
+        影響半径 σ (Sigma)
+        <span class="help-dot" aria-hidden="true">?</span>
+      </label>
       <div class="row-inline">
         <input type="range" id="sigma" min="1" max="100" value="20" step="1" />
         <span class="val-badge" id="sigma-val">20</span>
@@ -280,7 +341,10 @@
     </div>
 
     <div class="param-row">
-      <label>平滑化 σ (Smooth)</label>
+      <label class="param-label" for="smooth" tabindex="0" data-tooltip="生成したベクトル場をならす強さです。大きいほど急な向きの変化が減り、滑らかな結果になります。">
+        平滑化 σ (Smooth)
+        <span class="help-dot" aria-hidden="true">?</span>
+      </label>
       <div class="row-inline">
         <input type="range" id="smooth" min="0" max="5" value="1.0" step="0.1" />
         <span class="val-badge" id="smooth-val">1.0</span>
@@ -288,7 +352,10 @@
     </div>
 
     <div class="param-row">
-      <label>Bチャンネル値</label>
+      <label class="param-label" for="blue" tabindex="0" data-tooltip="出力 PNG の B チャンネルに入れる固定値です。ツール側の仕様に合わせて 0.0 から 1.0 で調整します。">
+        Bチャンネル値
+        <span class="help-dot" aria-hidden="true">?</span>
+      </label>
       <div class="row-inline">
         <input type="range" id="blue" min="0" max="1" value="0.5" step="0.01" />
         <span class="val-badge" id="blue-val">0.50</span>
@@ -296,7 +363,10 @@
     </div>
 
     <div class="param-row">
-      <label>ベース方向</label>
+      <label class="param-label" for="base-dir" tabindex="0" data-tooltip="向きが曖昧な線で基準にする全体方向です。線の始点・終点の向きが逆転する場合に調整します。">
+        ベース方向
+        <span class="help-dot" aria-hidden="true">?</span>
+      </label>
       <select id="base-dir">
         <option value="1,0">→ 右</option>
         <option value="1,1" selected>↘ 右下（デフォルト）</option>
@@ -308,7 +378,10 @@
     </div>
 
     <div class="param-row">
-      <label>モルフォロジー Close</label>
+      <label class="param-label" for="morph" tabindex="0" data-tooltip="線の小さな切れ目を埋める前処理です。値を大きくすると切れた線をつなぎやすくなりますが、細部もつながりやすくなります。">
+        モルフォロジー Close
+        <span class="help-dot" aria-hidden="true">?</span>
+      </label>
       <select id="morph">
         <option value="1">なし</option>
         <option value="3" selected>3×3（デフォルト）</option>
@@ -316,6 +389,8 @@
         <option value="7">7×7</option>
       </select>
     </div>
+
+    <button type="button" class="btn-reset" id="reset-btn">パラメータをリセット</button>
 
     <hr class="divider" />
 

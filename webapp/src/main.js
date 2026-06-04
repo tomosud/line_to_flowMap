@@ -23,6 +23,7 @@ const outCanvas     = document.getElementById('out-canvas')
 const previewArea   = document.getElementById('preview-area')
 const infoText      = document.getElementById('info-text')
 const skelToggle    = document.getElementById('skel-toggle')
+const resetBtn      = document.getElementById('reset-btn')
 
 // ─── Parameter inputs ─────────────────────────────────────────────────────────
 const sigmaInput      = document.getElementById('sigma')
@@ -33,6 +34,15 @@ const baseDirSel      = document.getElementById('base-dir')
 const morphSel        = document.getElementById('morph')
 const blueInput       = document.getElementById('blue')
 const blueVal         = document.getElementById('blue-val')
+
+const DEFAULT_PARAMS = {
+  sigma: '20',
+  smooth: '1.0',
+  blue: '0.5',
+  baseDir: '1,1',
+  morph: '3',
+}
+const PARAM_KEYS = ['sigma', 'smooth', 'blue', 'baseDir', 'morph']
 
 function setRangeValue(input, value) {
   const numberValue = Number(value)
@@ -79,9 +89,28 @@ function syncParamsToUrl() {
   window.history.replaceState(null, '', nextUrl)
 }
 
+function clearParamsFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  PARAM_KEYS.forEach(key => params.delete(key))
+
+  const query = params.toString()
+  const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+  window.history.replaceState(null, '', nextUrl)
+}
+
 function handleParamChange() {
   updateParamLabels()
   syncParamsToUrl()
+}
+
+function resetParams() {
+  setRangeValue(sigmaInput, DEFAULT_PARAMS.sigma)
+  setRangeValue(smoothInput, DEFAULT_PARAMS.smooth)
+  setRangeValue(blueInput, DEFAULT_PARAMS.blue)
+  setSelectValue(baseDirSel, DEFAULT_PARAMS.baseDir)
+  setSelectValue(morphSel, DEFAULT_PARAMS.morph)
+  updateParamLabels()
+  clearParamsFromUrl()
 }
 
 loadParamsFromUrl()
@@ -91,6 +120,7 @@ smoothInput.addEventListener('input', handleParamChange)
 blueInput.addEventListener('input', handleParamChange)
 baseDirSel.addEventListener('change', handleParamChange)
 morphSel.addEventListener('change', handleParamChange)
+resetBtn.addEventListener('click', resetParams)
 
 // ─── File loading ─────────────────────────────────────────────────────────────
 function loadFile(file) {
